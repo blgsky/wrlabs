@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>WR Labs</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html {
+        background: #08080c;
+      }
+      body {
+        margin: 0;
+        min-height: 100svh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: Montserrat, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          Roboto, Helvetica, Arial, sans-serif;
+        color: rgba(255, 255, 255, 0.62);
+        -webkit-font-smoothing: antialiased;
+        /* The same still frame the demo index opens on, so the gate reads as
+           the front door of that site rather than a separate utility page. */
+        background:
+          radial-gradient(42% 48% at 82% 22%, rgba(182, 64, 255, 0.16), transparent 70%),
+          radial-gradient(46% 52% at 96% 78%, rgba(217, 13, 159, 0.14), transparent 72%),
+          radial-gradient(56% 60% at 12% 68%, rgba(34, 106, 255, 0.14), transparent 72%),
+          #08080c;
+      }
+      main {
+        width: 100%;
+        max-width: 27rem;
+        padding: clamp(1.5rem, 5vw, 3rem);
+      }
+      .eyebrow {
+        margin: 0 0 1.1rem;
+        font-size: 0.8rem;
+        font-weight: 500;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.5);
+      }
+      h1 {
+        margin: 0 0 0.75rem;
+        font-size: clamp(1.5rem, 1.2rem + 1.4vw, 2rem);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1.15;
+        color: #fff;
+      }
+      p.lede {
+        margin: 0 0 2rem;
+        font-size: 0.95rem;
+        line-height: 1.55;
+      }
+      form {
+        display: grid;
+        gap: 0.75rem;
+      }
+      input {
+        width: 100%;
+        padding: 0.85rem 1rem;
+        font: inherit;
+        font-size: 1rem;
+        color: #fff;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 10px;
+        transition: border-color 0.2s, background-color 0.2s;
+      }
+      input::placeholder {
+        color: rgba(255, 255, 255, 0.32);
+      }
+      input:focus {
+        outline: none;
+        border-color: rgba(255, 255, 255, 0.4);
+        background: rgba(255, 255, 255, 0.09);
+      }
+      input:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      button {
+        padding: 0.7rem 1.6rem;
+        justify-self: start;
+        font: inherit;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #fff;
+        background: #175ad4;
+        border: 0;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: background-color 0.2s, transform 0.1s;
+      }
+      button:hover:not(:disabled) {
+        background: #1e68ea;
+      }
+      button:active:not(:disabled) {
+        transform: translateY(1px);
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+      .note {
+        min-height: 1.4rem;
+        margin: 0.35rem 0 0;
+        font-size: 0.85rem;
+        line-height: 1.4;
+      }
+      .note[data-state='error'] {
+        color: #ff8098;
+      }
+      .note[data-state='working'] {
+        color: rgba(255, 255, 255, 0.5);
+      }
+      footer {
+        margin-top: 2.5rem;
+        font-size: 0.8rem;
+        line-height: 1.5;
+        color: rgba(255, 255, 255, 0.34);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">WR Labs</p>
+      <h1>These prototypes are private</h1>
+      <p class="lede">
+        Enter the passphrase you were sent. This browser will remember it for a
+        week.
+      </p>
+
+      <form id="gate">
+        <input
+          id="passphrase"
+          type="password"
+          name="password"
+          placeholder="Passphrase"
+          autocomplete="current-password"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+          required
+        />
+        <button id="submit" type="submit">Unlock</button>
+        <p class="note" id="note" role="status" aria-live="polite"></p>
+      </form>
+
+      <footer>Prototypes — not for distribution.</footer>
+    </main>
+
+    <script>
+      ;(function () {
+        // Stamped in at seal time. This page answers the site root AND every
+        // unknown path below it, so it cannot resolve its own files relatively:
+        // opening /wrlabs/rembrand/ directly would look for the worker and the
+        // key material one directory too deep and find neither.
+        var BASE = '/wrlabs/'
+
+        var WEEK = 7 * 24 * 60 * 60 * 1000
+        var DB_NAME = 'wrlabs-gate'
+        var STORE = 'key'
+
+        // A wrong try costs two seconds; a fourth costs a minute. This only
+        // reaches someone typing guesses into this form — the blobs can be
+        // fetched and attacked offline, where nothing here applies. It is worth
+        // having anyway: hand-guessing is the attack this page actually sees.
+        var SHORT_HOLD = 2 * 1000
+        var LONG_HOLD = 60 * 1000
+        var FREE_TRIES = 3
+        var ATTEMPTS_KEY = 'wrlabs-gate-attempts'
+
+        var form = document.getElementById('gate')
+        var input = document.getElementById('passphrase')
+        var button = document.getElementById('submit')
+        var note = document.getElementById('note')
+        var countdown = null
+
+        function say(message, state) {
+          note.textContent = message
+          if (state) note.dataset.state = state
+          else delete note.dataset.state
+        }
+
+        // Kept in localStorage so a reload doesn't hand back the attempts. Any
+        // determined visitor can clear it from the console; the point is the
+        // friction, not a wall.
+        function readAttempts() {
+          try {
+            return JSON.parse(localStorage.getItem(ATTEMPTS_KEY)) || { count: 0, until: 0 }
+          } catch (e) {
+            return { count: 0, until: 0 }
+          }
+        }
+
+        function writeAttempts(state) {
+          try {
+            if (state) localStorage.setItem(ATTEMPTS_KEY, JSON.stringify(state))
+            else localStorage.removeItem(ATTEMPTS_KEY)
+          } catch (e) {
+            /* private mode — the hold still applies for this page's lifetime */
+          }
+        }
+
+        function hold(until, message) {
+          clearInterval(countdown)
+          function tick() {
+            var left = Math.ceil((until - Date.now()) / 1000)
+            if (left <= 0) {
+              clearInterval(countdown)
+              input.disabled = false
+              button.disabled = false
+              say('')
+              input.focus()
+              input.select()
+              return
+            }
+            input.disabled = true
+            button.disabled = true
+            say(message(left), 'error')
+          }
+          tick()
+          countdown = setInterval(tick, 250)
+        }
+
+        if (!window.isSecureContext || !navigator.serviceWorker || !window.crypto?.subtle) {
+          form.hidden = true
+          say('This browser cannot open the prototypes — try a current Chrome, Safari, Edge or Firefox.', 'error')
+          return
+        }
+
+        function openDb() {
+          return new Promise(function (resolve, reject) {
+            var req = indexedDB.open(DB_NAME, 1)
+            req.onupgradeneeded = function () {
+              req.result.createObjectStore(STORE)
+            }
+            req.onsuccess = function () {
+              resolve(req.result)
+            }
+            req.onerror = function () {
+              reject(req.error)
+            }
+          })
+        }
+
+        function storeKey(key) {
+          return openDb().then(function (db) {
+            return new Promise(function (resolve, reject) {
+              var tx = db.transaction(STORE, 'readwrite')
+              // A non-extractable CryptoKey: the passphrase is never written
+              // down, and the derived key can be used but not read back out.
+              tx.objectStore(STORE).put({ key: key, expires: Date.now() + WEEK }, 'session')
+              tx.oncomplete = resolve
+              tx.onerror = function () {
+                reject(tx.error)
+              }
+            })
+          })
+        }
+
+        function bytes(base64) {
+          var binary = atob(base64)
+          var out = new Uint8Array(binary.length)
+          for (var i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i)
+          return out
+        }
+
+        async function deriveKey(passphrase, meta) {
+          var material = await crypto.subtle.importKey(
+            'raw',
+            new TextEncoder().encode(passphrase),
+            'PBKDF2',
+            false,
+            ['deriveKey']
+          )
+          return crypto.subtle.deriveKey(
+            {
+              name: 'PBKDF2',
+              salt: bytes(meta.salt),
+              iterations: meta.iter,
+              hash: 'SHA-256',
+            },
+            material,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['decrypt']
+          )
+        }
+
+        async function unlock(passphrase) {
+          var meta = await (await fetch(BASE + 'enc/meta.json', { cache: 'no-store' })).json()
+          var key = await deriveKey(passphrase, meta)
+
+          // The check blob is the only thing that can tell a wrong passphrase
+          // from a page that failed to load its own files. Keeping them apart
+          // matters: reporting a broken fetch as a bad passphrase sends anyone
+          // debugging it after the wrong thing entirely.
+          var check = bytes(meta.check)
+          try {
+            await crypto.subtle.decrypt(
+              { name: 'AES-GCM', iv: check.subarray(0, 12) },
+              key,
+              check.subarray(12)
+            )
+          } catch (e) {
+            var rejected = new Error('wrong passphrase')
+            rejected.wrongPassphrase = true
+            throw rejected
+          }
+
+          writeAttempts(null)
+
+          // Ask for the key to be exempt from eviction. Without this, the
+          // browser is free to clear IndexedDB whenever it wants the disk back,
+          // and the week this page promises quietly becomes "until then".
+          // Chrome and Firefox decide silently on engagement — no prompt, and a
+          // refusal is fine, so this must never block the unlock.
+          try {
+            if (navigator.storage?.persist) await navigator.storage.persist()
+          } catch (e) {
+            /* not supported, or declined — the key is stored either way */
+          }
+
+          await storeKey(key)
+          await navigator.serviceWorker.register(BASE + 'sw.js', { scope: BASE })
+          var registration = await navigator.serviceWorker.ready
+          if (registration.active) registration.active.postMessage('unlocked')
+          // The address never changed on the way here — a deep link that fell
+          // through to this page reloads straight back into the site.
+          location.reload()
+        }
+
+        form.addEventListener('submit', function (event) {
+          event.preventDefault()
+          if (button.disabled) return
+
+          button.disabled = true
+          say('Unlocking…', 'working')
+
+          unlock(input.value).catch(function (error) {
+            if (!error || !error.wrongPassphrase) {
+              // Not a guess: the page could not load what it needs. Charging it
+              // as a failed attempt would lock out someone who did nothing
+              // wrong, and bury the real fault under a passphrase message.
+              button.disabled = false
+              input.select()
+              say('Could not load the site. Reload the page and try again.', 'error')
+              return
+            }
+
+            var state = readAttempts()
+            state.count += 1
+
+            var locked = state.count > FREE_TRIES
+            state.until = Date.now() + (locked ? LONG_HOLD : SHORT_HOLD)
+            writeAttempts(state)
+
+            hold(
+              state.until,
+              locked
+                ? function (left) {
+                    return 'Too many attempts. Try again in ' + left + ' s.'
+                  }
+                : function () {
+                    return 'That passphrase does not open these sites.'
+                  }
+            )
+          })
+        })
+
+        // A hold that outlived the page: resume it rather than start fresh.
+        var pending = readAttempts()
+        if (pending.until > Date.now()) {
+          hold(pending.until, function (left) {
+            return 'Too many attempts. Try again in ' + left + ' s.'
+          })
+        } else {
+          input.focus()
+        }
+      })()
+    </script>
+  </body>
+</html>
